@@ -8,7 +8,6 @@ pub mod base;
 pub mod alpha;
 pub mod backtest;
 pub mod data;
-pub mod models;
 pub mod report;
 
 #[pymodule]
