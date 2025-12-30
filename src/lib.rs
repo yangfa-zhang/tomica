@@ -7,6 +7,5 @@ mod operators;
 
 #[pymodule]
 mod tomica(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    
     Ok(())
 }
