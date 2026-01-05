@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3::exceptions::PyRuntimeError;
 use pyo3_polars::types::PySeries;
 use polars::prelude::*;
 
@@ -12,8 +13,22 @@ fn ts_delay(
     Ok(PySeries(out))
 }
 
+#[pyfunction]
+fn ts_delta(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let out: Series = data.into();
+    let delayed_data = out.shift(n);
+    let delta = (&out - &delayed_data).map_err(|e| {
+        PyRuntimeError::new_err(format!("Polars error: {}", e))
+    })?;
+    Ok(PySeries(delta))
+}
+
 #[pymodule]
 pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_delay, m)?)?;
+    m.add_function(wrap_pyfunction!(ts_delta, m)?)?;    
     Ok(())
 }
