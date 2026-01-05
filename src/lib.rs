@@ -1,20 +1,10 @@
 #![allow(non_snake_case)]
 use pyo3::prelude::*;
-use pyo3_polars::types::PySeries;
-use polars::prelude::*;
-
-#[pyfunction]
-fn ts_delay(
-    data: PySeries,
-    n: i64,
-) -> PyResult<PySeries> {
-    let out: Series = data.into();
-    let out = out.shift(n);
-    Ok(PySeries(out))
-}
+use pyo3::wrap_pymodule;
+pub mod operators;
 
 #[pymodule]
 fn tomica(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(ts_delay, m)?)?;
+    m.add_wrapped(wrap_pymodule!(operators::operators))?;
     Ok(())
 }
