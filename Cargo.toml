@@ -9,4 +9,6 @@ name = "tomica"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.27.0"
+pyo3 = { version = "0.26", features = ["extension-module"] }
+pyo3-polars = "0.25"
+polars = { version = "0.52", features = ["lazy","timezones"]}
