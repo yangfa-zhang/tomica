@@ -155,6 +155,10 @@ fn ts_rank(
         window_size: n as usize,
         min_periods: 1,   
         center: false,
+        fn_params: Some(RollingFnParams::Rank{
+            method:RollingRankMethod::Average,
+            seed: Some(42),
+        }),
         ..Default::default()
     }).map_err(|e| {
         PyRuntimeError::new_err(format!("Polars error: {}", e))
