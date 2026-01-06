@@ -73,3 +73,4 @@ docs/_build/
 
 # Unrelarvant files
 myboard.txt
+/.github/workflows
