@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3_polars::types::PySeries;
 use polars::prelude::*;
+use polars_compute::rolling::RollingQuantileParams;
 
 #[pyfunction]
 fn ts_delay(
@@ -183,6 +184,56 @@ fn ts_variance(
     Ok(PySeries(result))
 }
 
+#[pyfunction]
+fn ts_quantile_up(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries>{
+    let data: Series = data.into();
+    let result = data.rolling_quantile(RollingOptionsFixedWindow {
+        window_size: n as usize,
+        min_periods: 1,   
+        center: false,
+        fn_params: Some(
+            RollingFnParams::Quantile(
+                RollingQuantileParams {
+                    prob: 0.75,
+                    method: QuantileMethod::Nearest,
+                }
+            )
+        ),
+        ..Default::default()
+    }).map_err(|e| {
+        PyRuntimeError::new_err(format!("Polars error: {}", e))
+    })?;
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_quantile_down(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries>{
+    let data: Series = data.into();
+    let result = data.rolling_quantile(RollingOptionsFixedWindow {
+        window_size: n as usize,
+        min_periods: 1,   
+        center: false,
+        fn_params: Some(
+            RollingFnParams::Quantile(
+                RollingQuantileParams {
+                    prob: 0.25,
+                    method: QuantileMethod::Nearest,
+                }
+            )
+        ),
+        ..Default::default()
+    }).map_err(|e| {
+        PyRuntimeError::new_err(format!("Polars error: {}", e))
+    })?;
+    Ok(PySeries(result))
+}
+
 
 #[pymodule]
 pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
@@ -197,5 +248,7 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_std, m)?)?;    
     m.add_function(wrap_pyfunction!(ts_rank, m)?)?;    
     m.add_function(wrap_pyfunction!(ts_variance, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_quantile_up, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_quantile_down, m)?)?; 
     Ok(())
 }

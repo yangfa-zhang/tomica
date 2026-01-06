@@ -12,3 +12,4 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.26", features = ["extension-module"] }
 pyo3-polars = "0.25"
 polars = { version = "0.52", features = ["lazy","timezones","rolling_window"]}
+polars-compute = "*"
