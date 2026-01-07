@@ -240,20 +240,16 @@ fn ts_zscore(
     n: i64,
 ) -> PyResult<PySeries>{
     let data: Series = data.into();
-    let data_mean = data.rolling_mean(RollingOptionsFixedWindow {
+    let rolling_opts = RollingOptionsFixedWindow {
         window_size: n as usize,
         min_periods: 1,   
         center: false,
         ..Default::default()
-    }).map_err(|e| {
+    };
+    let data_mean = data.rolling_mean(rolling_opts.clone()).map_err(|e| {
         PyRuntimeError::new_err(format!("Polars error: {}", e))
     })?;
-    let data_std = data.rolling_std(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
+    let data_std = data.rolling_std(rolling_opts).map_err(|e| {
         PyRuntimeError::new_err(format!("Polars error: {}", e))
     })?;
     let diff = (&data - &data_mean).map_err(|e| {
