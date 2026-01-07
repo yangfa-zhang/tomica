@@ -234,6 +234,36 @@ fn ts_quantile_down(
     Ok(PySeries(result))
 }
 
+#[pyfunction]
+fn ts_zscore(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries>{
+    let data: Series = data.into();
+    let data_mean = data.rolling_mean(RollingOptionsFixedWindow {
+        window_size: n as usize,
+        min_periods: 1,   
+        center: false,
+        ..Default::default()
+    }).map_err(|e| {
+        PyRuntimeError::new_err(format!("Polars error: {}", e))
+    })?;
+    let data_std = data.rolling_std(RollingOptionsFixedWindow {
+        window_size: n as usize,
+        min_periods: 1,   
+        center: false,
+        ..Default::default()
+    }).map_err(|e| {
+        PyRuntimeError::new_err(format!("Polars error: {}", e))
+    })?;
+    let diff = (&data - &data_mean).map_err(|e| {
+        PyRuntimeError::new_err(format!("Polars error: {}", e))
+    })?;
+    let result = (&diff/&data_std).map_err(|e| {
+        PyRuntimeError::new_err(format!("Polars error: {}", e))
+    })?;
+    Ok(PySeries(result))
+}
 
 #[pymodule]
 pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
@@ -250,5 +280,6 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_variance, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_quantile_up, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_quantile_down, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_zscore, m)?)?; 
     Ok(())
 }
