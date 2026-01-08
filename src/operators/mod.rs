@@ -24,6 +24,7 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_quantile_down, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_zscore, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_robust_zscore, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_scale, m)?)?; 
     Ok(())
 }
 
@@ -256,5 +257,19 @@ fn ts_robust_zscore(
     let mad_scaled = &mad * 1.4826;
     let result = (&diff / &mad_scaled).map_err(polars_err)?;
 
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_scale(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+    let data_min = data.rolling_min(default_rolling_option(n)).map_err(polars_err)?;
+    let data_max = data.rolling_max(default_rolling_option(n)).map_err(polars_err)?;
+    let diff1 = (&data - &data_min).map_err(polars_err)?;
+    let diff2 = (&data_max - &data_min).map_err(polars_err)?;
+    let result = (&diff1/&diff2).map_err(polars_err)?;
     Ok(PySeries(result))
 }
