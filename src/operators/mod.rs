@@ -4,6 +4,30 @@ use pyo3_polars::types::PySeries;
 use polars::prelude::*;
 use polars_compute::rolling::RollingQuantileParams;
 
+mod utils;
+use utils::*;
+
+#[pymodule]
+pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
+    m.add_function(wrap_pyfunction!(ts_delay, m)?)?;
+    m.add_function(wrap_pyfunction!(ts_delta, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_returns, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_sum, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_product, m)?)?;   
+    m.add_function(wrap_pyfunction!(ts_max, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_min, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_mean, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_std, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_rank, m)?)?;    
+    m.add_function(wrap_pyfunction!(ts_variance, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_quantile_up, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_quantile_down, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_zscore, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_robust_zscore, m)?)?; 
+    Ok(())
+}
+
+
 #[pyfunction]
 fn ts_delay(
     data: PySeries,
@@ -21,9 +45,7 @@ fn ts_delta(
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
     let delayed_data = data.shift(n);
-    let result = (&data - &delayed_data).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = (&data - &delayed_data).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -34,13 +56,9 @@ fn ts_returns(
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
     let delayed_data = data.shift(n);
-    let delta = (&data - &delayed_data).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let delta = (&data - &delayed_data).map_err(polars_err)?;
 
-    let result = (&delta / &delayed_data).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = (&delta / &delayed_data).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -50,14 +68,7 @@ fn ts_sum(
     n: i64,
 ) -> PyResult<PySeries>{
     let data: Series = data.into();
-    let result = data.rolling_sum(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = data.rolling_sum(default_rolling_option(n)).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -67,14 +78,7 @@ fn ts_product(
     n: i64,
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
-    let result = data.rolling_sum(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = data.rolling_sum(default_rolling_option(n)).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -84,14 +88,7 @@ fn ts_max(
     n: i64,
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
-    let result = data.rolling_max(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = data.rolling_max(default_rolling_option(n)).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -101,14 +98,7 @@ fn ts_min(
     n: i64,
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
-    let result = data.rolling_min(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = data.rolling_min(default_rolling_option(n)).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -118,14 +108,7 @@ fn ts_mean(
     n: i64,
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
-    let result = data.rolling_mean(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = data.rolling_mean(default_rolling_option(n)).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -135,14 +118,7 @@ fn ts_std(
     n: i64,
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
-    let result = data.rolling_std(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = data.rolling_std(default_rolling_option(n)).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -161,9 +137,7 @@ fn ts_rank(
             seed: Some(42),
         }),
         ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    }).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -173,14 +147,7 @@ fn ts_variance(
     n: i64,
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
-    let result = data.rolling_var(RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let result = data.rolling_var(default_rolling_option(n)).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -203,9 +170,7 @@ fn ts_quantile_up(
             )
         ),
         ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    }).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -228,9 +193,7 @@ fn ts_quantile_down(
             )
         ),
         ..Default::default()
-    }).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    }).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -240,24 +203,11 @@ fn ts_zscore(
     n: i64,
 ) -> PyResult<PySeries>{
     let data: Series = data.into();
-    let rolling_opts = RollingOptionsFixedWindow {
-        window_size: n as usize,
-        min_periods: 1,   
-        center: false,
-        ..Default::default()
-    };
-    let data_mean = data.rolling_mean(rolling_opts.clone()).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
-    let data_std = data.rolling_std(rolling_opts).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
-    let diff = (&data - &data_mean).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
-    let result = (&diff/&data_std).map_err(|e| {
-        PyRuntimeError::new_err(format!("Polars error: {}", e))
-    })?;
+    let rolling_opts = default_rolling_option(n);
+    let data_mean = data.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+    let data_std = data.rolling_std(rolling_opts).map_err(polars_err)?;
+    let diff = (&data - &data_mean).map_err(polars_err)?;
+    let result = (&diff/&data_std).map_err(polars_err)?;
     Ok(PySeries(result))
 }
 
@@ -284,9 +234,9 @@ fn ts_robust_zscore(
     };
     let med = data
         .rolling_quantile(rolling_opts.clone())
-        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+        .map_err(polars_err)?;
     let diff: Series = (&data - &med)
-        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+        .map_err(polars_err)?;
     let abs_diff = match diff.dtype() {
         DataType::Int32 => diff.i32().unwrap()
             .apply(|opt_v| opt_v.map(|v| v.abs()))
@@ -302,36 +252,9 @@ fn ts_robust_zscore(
             .into_series(),
         _ => return Err(PyRuntimeError::new_err("unsupported dtype for abs")),
     };
-
-
-    let mad = abs_diff
-        .rolling_quantile(rolling_opts)
-        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+    let mad = abs_diff.rolling_quantile(rolling_opts).map_err(polars_err)?;
     let mad_scaled = &mad * 1.4826;
-
-    let result = (&diff / &mad_scaled)
-        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+    let result = (&diff / &mad_scaled).map_err(polars_err)?;
 
     Ok(PySeries(result))
-}
-
-
-#[pymodule]
-pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
-    m.add_function(wrap_pyfunction!(ts_delay, m)?)?;
-    m.add_function(wrap_pyfunction!(ts_delta, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_returns, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_sum, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_product, m)?)?;   
-    m.add_function(wrap_pyfunction!(ts_max, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_min, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_mean, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_std, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_rank, m)?)?;    
-    m.add_function(wrap_pyfunction!(ts_variance, m)?)?; 
-    m.add_function(wrap_pyfunction!(ts_quantile_up, m)?)?; 
-    m.add_function(wrap_pyfunction!(ts_quantile_down, m)?)?; 
-    m.add_function(wrap_pyfunction!(ts_zscore, m)?)?; 
-    m.add_function(wrap_pyfunction!(ts_robust_zscore, m)?)?; 
-    Ok(())
 }
