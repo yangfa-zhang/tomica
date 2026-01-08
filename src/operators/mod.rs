@@ -25,6 +25,10 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_zscore, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_robust_zscore, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_scale, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_sharpe, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_av_diff, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_min_diff, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_max_diff, m)?)?;
     Ok(())
 }
 
@@ -266,10 +270,57 @@ fn ts_scale(
     n: i64,
 ) -> PyResult<PySeries> {
     let data: Series = data.into();
-    let data_min = data.rolling_min(default_rolling_option(n)).map_err(polars_err)?;
-    let data_max = data.rolling_max(default_rolling_option(n)).map_err(polars_err)?;
+    let rolling_opts = default_rolling_option(n);
+    let data_min = data.rolling_min(rolling_opts.clone()).map_err(polars_err)?;
+    let data_max = data.rolling_max(rolling_opts).map_err(polars_err)?;
     let diff1 = (&data - &data_min).map_err(polars_err)?;
     let diff2 = (&data_max - &data_min).map_err(polars_err)?;
     let result = (&diff1/&diff2).map_err(polars_err)?;
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_sharpe(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+    let rolling_opts = default_rolling_option(n);
+    let data_mean = data.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+    let data_std = data.rolling_std(rolling_opts).map_err(polars_err)?;
+    let result = (&data_mean/&data_std).map_err(polars_err)?;
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_av_diff(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+    let data_mean = data.rolling_mean(default_rolling_option(n)).map_err(polars_err)?;
+    let result = (&data - &data_mean).map_err(polars_err)?;
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_min_diff(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+    let data_min = data.rolling_min(default_rolling_option(n)).map_err(polars_err)?;
+    let result = (&data - &data_min).map_err(polars_err)?;
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_max_diff(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+    let data_max = data.rolling_max(default_rolling_option(n)).map_err(polars_err)?;
+    let result = (&data - &data_max).map_err(polars_err)?;
     Ok(PySeries(result))
 }
