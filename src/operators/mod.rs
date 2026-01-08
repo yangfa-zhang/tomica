@@ -261,6 +261,61 @@ fn ts_zscore(
     Ok(PySeries(result))
 }
 
+#[pyfunction]
+fn ts_robust_zscore(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+
+    let rolling_opts = RollingOptionsFixedWindow {
+        window_size: n as usize,
+        min_periods: 1,
+        center: false,
+        fn_params: Some(
+            RollingFnParams::Quantile(
+                RollingQuantileParams {
+                    prob: 0.50,
+                    method: QuantileMethod::Nearest,
+                }
+            )
+        ),
+        ..Default::default()
+    };
+    let med = data
+        .rolling_quantile(rolling_opts.clone())
+        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+    let diff: Series = (&data - &med)
+        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+    let abs_diff = match diff.dtype() {
+        DataType::Int32 => diff.i32().unwrap()
+            .apply(|opt_v| opt_v.map(|v| v.abs()))
+            .into_series(),
+        DataType::Int64 => diff.i64().unwrap()
+            .apply(|opt_v| opt_v.map(|v| v.abs()))
+            .into_series(),
+        DataType::Float32 => diff.f32().unwrap()
+            .apply(|opt_v| opt_v.map(|v| v.abs()))
+            .into_series(),
+        DataType::Float64 => diff.f64().unwrap()
+            .apply(|opt_v| opt_v.map(|v| v.abs()))
+            .into_series(),
+        _ => return Err(PyRuntimeError::new_err("unsupported dtype for abs")),
+    };
+
+
+    let mad = abs_diff
+        .rolling_quantile(rolling_opts)
+        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+    let mad_scaled = &mad * 1.4826;
+
+    let result = (&diff / &mad_scaled)
+        .map_err(|e| PyRuntimeError::new_err(format!("Polars error: {}", e)))?;
+
+    Ok(PySeries(result))
+}
+
+
 #[pymodule]
 pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_delay, m)?)?;
@@ -277,5 +332,6 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_quantile_up, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_quantile_down, m)?)?; 
     m.add_function(wrap_pyfunction!(ts_zscore, m)?)?; 
+    m.add_function(wrap_pyfunction!(ts_robust_zscore, m)?)?; 
     Ok(())
 }
