@@ -31,6 +31,9 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_max_diff, m)?)?;
     m.add_function(wrap_pyfunction!(ts_cov, m)?)?;
     m.add_function(wrap_pyfunction!(ts_beta, m)?)?;
+    m.add_function(wrap_pyfunction!(ts_pos_count, m)?)?;
+    m.add_function(wrap_pyfunction!(ts_neg_count, m)?)?;
+    m.add_function(wrap_pyfunction!(decay_n, m)?)?;
     Ok(())
 }
 
@@ -366,5 +369,58 @@ fn ts_beta(data1: PySeries, data2: PySeries, n: i64) -> PyResult<PySeries> {
     let s1_s2_cov = prod.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
     let s1_var = s1.rolling_var(rolling_opts).map_err(polars_err)?;
     let result = (&s1_s2_cov/&s1_var).map_err(polars_err)?;
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_pos_count(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+
+    let pos = data
+        .gt(0).map_err(polars_err)?         
+        .cast(&DataType::Int64).map_err(polars_err)?;  
+    let result = pos.rolling_sum(default_rolling_option(n)).map_err(polars_err)?;
+
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_neg_count(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+
+    let pos = data
+        .lt(0).map_err(polars_err)?         
+        .cast(&DataType::Int64).map_err(polars_err)?;  
+    let result = pos.rolling_sum(default_rolling_option(n)).map_err(polars_err)?;
+
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn decay_n(
+    data: PySeries,
+    n: i64,
+) -> PyResult<PySeries> {
+    let data: Series = data.into();
+    let n_usize = n as usize;
+    let mut weights: Vec<f64> = (1..=n_usize).map(|i| i as f64).collect();
+    let total: f64 = weights.iter().sum();
+    for w in &mut weights {
+        *w /= total;
+    }
+    let rolling_opts = RollingOptionsFixedWindow {
+        window_size: n_usize,
+        min_periods: 1,   
+        center: false,
+        weights: Some(weights),
+        ..Default::default()
+    };
+    let result = data.rolling_mean(rolling_opts).map_err(polars_err)?;
     Ok(PySeries(result))
 }
