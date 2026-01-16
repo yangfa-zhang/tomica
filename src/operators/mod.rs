@@ -9,6 +9,7 @@ use utils::*;
 
 #[pymodule]
 pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
+    // Time series operators
     m.add_function(wrap_pyfunction!(ts_delay, m)?)?;
     m.add_function(wrap_pyfunction!(ts_delta, m)?)?;    
     m.add_function(wrap_pyfunction!(ts_returns, m)?)?;    
@@ -38,8 +39,11 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_decay, m)?)?;
     m.add_function(wrap_pyfunction!(ts_argmax, m)?)?;
     m.add_function(wrap_pyfunction!(ts_argmin, m)?)?;
+    // Cross section operators
+    m.add_function(wrap_pyfunction!(cs_rank, m)?)?;
     Ok(())
 }
+
 
 
 #[pyfunction]
@@ -633,5 +637,72 @@ fn ts_argmin(
     }
 
     let result = Series::new("argmin".into(), result_vec);
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn cs_rank(data: PySeries, pct: Option<bool>) -> PyResult<PySeries> {
+    // Cross-sectional rank: ranks values and optionally returns percentile (0.0 to 1.0)
+    let data: Series = data.into();
+    let use_pct = pct.unwrap_or(true);
+
+    // Convert to f64 for ranking
+    let data_f64 = data.cast(&DataType::Float64).map_err(polars_err)?;
+    let ca = data_f64.f64().map_err(polars_err)?;
+
+    let len = ca.len();
+    let mut result_vec: Vec<Option<f64>> = Vec::with_capacity(len);
+
+    // Collect non-null values with their indices
+    let mut values_with_idx: Vec<(usize, f64)> = Vec::new();
+    for (idx, opt_val) in ca.iter().enumerate() {
+        if let Some(val) = opt_val {
+            values_with_idx.push((idx, val));
+        }
+    }
+
+    let valid_count = values_with_idx.len();
+
+    if valid_count == 0 {
+        return Ok(PySeries(Series::new("".into(), vec![Option::<f64>::None; len])));
+    }
+    values_with_idx.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut ranks: Vec<(usize, f64)> = Vec::with_capacity(valid_count);
+    let mut i = 0;
+    while i < valid_count {
+        let current_val = values_with_idx[i].1;
+        let mut j = i;
+        while j < valid_count && values_with_idx[j].1 == current_val {
+            j += 1;
+        }
+
+        // Average rank for tied values (1-based indexing)
+        let avg_rank = ((i + 1 + j) as f64) / 2.0;
+
+        for k in i..j {
+            ranks.push((values_with_idx[k].0, avg_rank));
+        }
+
+        i = j;
+    }
+    for _ in 0..len {
+        result_vec.push(None);
+    }
+
+    for (idx, rank) in ranks {
+        if use_pct {
+            // Convert to percentile: (rank - 1) / (valid_count - 1)
+            if valid_count > 1 {
+                result_vec[idx] = Some((rank - 1.0) / ((valid_count - 1) as f64));
+            } else {
+                result_vec[idx] = Some(0.0);
+            }
+        } else {
+            result_vec[idx] = Some(rank);
+        }
+    }
+
+    let result = Series::new("".into(), result_vec);
     Ok(PySeries(result))
 }
