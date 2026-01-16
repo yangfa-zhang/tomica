@@ -31,6 +31,8 @@ pub fn operators(m: &Bound<'_, PyModule>)-> PyResult<()>{
     m.add_function(wrap_pyfunction!(ts_max_diff, m)?)?;
     m.add_function(wrap_pyfunction!(ts_cov, m)?)?;
     m.add_function(wrap_pyfunction!(ts_beta, m)?)?;
+    m.add_function(wrap_pyfunction!(ts_corr, m)?)?;
+    m.add_function(wrap_pyfunction!(ts_regression, m)?)?;
     m.add_function(wrap_pyfunction!(ts_pos_count, m)?)?;
     m.add_function(wrap_pyfunction!(ts_neg_count, m)?)?;
     m.add_function(wrap_pyfunction!(decay_n, m)?)?;
@@ -369,6 +371,131 @@ fn ts_beta(data1: PySeries, data2: PySeries, n: i64) -> PyResult<PySeries> {
     let s1_s2_cov = prod.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
     let s1_var = s1.rolling_var(rolling_opts).map_err(polars_err)?;
     let result = (&s1_s2_cov/&s1_var).map_err(polars_err)?;
+    Ok(PySeries(result))
+}
+
+#[pyfunction]
+fn ts_corr(data1: PySeries, data2: PySeries, n: i64, rank: Option<bool>) -> PyResult<PySeries> {
+    let s1: Series = data1.into();
+    let s2: Series = data2.into();
+
+    if s1.len() != s2.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Series lengths must match",
+        ));
+    }
+
+    let use_rank = rank.unwrap_or(false);
+
+    if use_rank {
+        let rolling_opts = RollingOptionsFixedWindow {
+            window_size: n as usize,
+            min_periods: 1,
+            center: false,
+            fn_params: Some(RollingFnParams::Rank {
+                method: RollingRankMethod::Average,
+                seed: Some(42),
+            }),
+            ..Default::default()
+        };
+
+        let s1_rank = s1.rolling_rank(rolling_opts.clone()).map_err(polars_err)?;
+        let s2_rank = s2.rolling_rank(rolling_opts).map_err(polars_err)?;
+        let result = calculate_pearson_corr(&s1_rank, &s2_rank, n).map_err(polars_err)?;
+        Ok(PySeries(result))
+    } else {
+        let result = calculate_pearson_corr(&s1, &s2, n).map_err(polars_err)?;
+        Ok(PySeries(result))
+    }
+}
+
+#[pyfunction]
+fn ts_regression(data1: PySeries, data2: PySeries, n: i64, rettype: i64) -> PyResult<PySeries> {
+    // Returns results of linear model y = beta * x + alpha + resid
+    // data1:   features
+    // data2:   label
+    // n:       period  
+    // rettype: return type. 0 for ressid, 1 for beta, 2 for alpha, 3 for y_hat, 4 for R^2
+    let s1: Series = data1.into();
+    let s2: Series = data2.into();
+    if s1.len() != s2.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Series lengths must match",
+        ));
+    }
+    let rolling_opts = default_rolling_option(n);
+    if rettype == 0 {
+        let s1_mean     = s1.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s2_mean     = s2.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let diff1       = (&s1-&s1_mean).map_err(polars_err)?;
+        let diff2       = (&s2-&s2_mean).map_err(polars_err)?;
+        let prod        = (&diff1 * &diff2).map_err(polars_err)?;
+        let s1_s2_cov   = prod.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s1_var      = s1.rolling_var(rolling_opts).map_err(polars_err)?;
+        let beta        = (&s1_s2_cov/&s1_var).map_err(polars_err)?;
+        let alpha       = (&s2_mean-&beta*&s1_mean).map_err(polars_err)?;
+        let predict     = (&beta*s1 + &alpha).map_err(polars_err)?;
+        let result      = (&s2-&predict).map_err(polars_err)?;
+    }
+    else if rettype == 1 {
+        let s1_mean     = s1.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s2_mean     = s2.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let diff1       = (&s1-&s1_mean).map_err(polars_err)?;
+        let diff2       = (&s2-&s2_mean).map_err(polars_err)?;
+        let prod        = (&diff1 * &diff2).map_err(polars_err)?;
+        let s1_s2_cov   = prod.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s1_var      = s1.rolling_var(rolling_opts).map_err(polars_err)?;
+        let result      = (&s1_s2_cov/&s1_var).map_err(polars_err)?;
+    }
+    else if rettype == 2 {
+        let s1_mean     = s1.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s2_mean     = s2.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let diff1       = (&s1-&s1_mean).map_err(polars_err)?;
+        let diff2       = (&s2-&s2_mean).map_err(polars_err)?;
+        let prod        = (&diff1 * &diff2).map_err(polars_err)?;
+        let s1_s2_cov   = prod.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s1_var      = s1.rolling_var(rolling_opts).map_err(polars_err)?;
+        let beta        = (&s1_s2_cov/&s1_var).map_err(polars_err)?;
+        let result      = (&s2_mean-&beta*&s1_mean).map_err(polars_err)?;
+    }
+    else if rettype == 3 {
+        let s1_mean     = s1.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s2_mean     = s2.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let diff1       = (&s1-&s1_mean).map_err(polars_err)?;
+        let diff2       = (&s2-&s2_mean).map_err(polars_err)?;
+        let prod        = (&diff1 * &diff2).map_err(polars_err)?;
+        let s1_s2_cov   = prod.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s1_var      = s1.rolling_var(rolling_opts).map_err(polars_err)?;
+        let beta        = (&s1_s2_cov/&s1_var).map_err(polars_err)?;
+        let alpha       = (&s2_mean-&beta*&s1_mean).map_err(polars_err)?;
+        let result      = (&beta*s1 + &alpha).map_err(polars_err)?;
+    }
+    else {
+        let s1_mean     = s1.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s2_mean     = s2.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let diff1       = (&s1-&s1_mean).map_err(polars_err)?;
+        let diff2       = (&s2-&s2_mean).map_err(polars_err)?;
+        let prod        = (&diff1 * &diff2).map_err(polars_err)?;
+        let s1_s2_cov   = prod.rolling_mean(rolling_opts.clone()).map_err(polars_err)?;
+        let s1_var      = s1.rolling_var(rolling_opts).map_err(polars_err)?;
+        let beta        = (&s1_s2_cov/&s1_var).map_err(polars_err)?;
+        let alpha       = (&s2_mean-&beta*&s1_mean).map_err(polars_err)?;
+        let predict     = (&beta*s1 + &alpha).map_err(polars_err)?;
+        let rolling_rank_opts = RollingOptionsFixedWindow {
+            window_size: n as usize,
+            min_periods: 1,
+            center: false,
+            fn_params: Some(RollingFnParams::Rank {
+                method: RollingRankMethod::Average,
+                seed: Some(42),
+            }),
+            ..Default::default()
+        };
+
+        let predict_rank = predict.rolling_rank(rolling_rank_opts.clone()).map_err(polars_err)?;
+        let s2_rank = s2.rolling_rank(rolling_rank_opts).map_err(polars_err)?;
+        let result = calculate_pearson_corr(&predict_rank, &s2_rank, n).map_err(polars_err)?;
+    }
     Ok(PySeries(result))
 }
 
